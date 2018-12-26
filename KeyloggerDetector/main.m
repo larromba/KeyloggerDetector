@@ -2,14 +2,19 @@
 //  main.m
 //  KeyloggerDetector
 //
+// Locates if there is any keyloggers located on the system and the location
+//
 //  Created by User on 12/26/18.
 //  Copyright © 2018 Stuart Ashenbrenner. All rights reserved.
 //
 #import <notify.h>
 #import <libproc.h>
-
 #import <Foundation/Foundation.h>
 
+
+
+
+// path from the pid
 NSString* pathFromPid(pid_t pid)
 {
     // buffer the process path
@@ -45,7 +50,7 @@ NSMutableDictionary* listTaps()
     keyboardTaps = [NSMutableDictionary dictionary];
     
     // get all taps
-    if(kCGErrorSuccess != CGGetEventTapList(0, NULL, &eventTapCount))
+    if (kCGErrorSuccess != CGGetEventTapList(0, NULL, &eventTapCount))
     {
         // bail
         goto bail;
@@ -74,14 +79,14 @@ NSMutableDictionary* listTaps()
     {
         tap = taps[i];
         
-        if(true != tap.enabled)
+        if (true != tap.enabled)
         {
             // skip
             continue;
         }
         
         // ignore non-keypresses
-        if( (keyboardTap & tap.eventsOfInterest) != keyboardTap)
+        if ( (keyboardTap & tap.eventsOfInterest) != keyboardTap)
         {
             // skip
             continue;
@@ -118,14 +123,45 @@ int main(int argc, const char * argv[]) {
         // init taps
         taps = listTaps();
         
-        // debug message
+        // debug message/generate list of taps
         NSLog(@"detected %lu existing keyboard taps", (unsigned long)taps.count);
-        for(NSNumber* tap in taps)
+        for (NSNumber* tap in taps)
         {
             NSLog(@"tap (process: %@): %@", tap, taps[tap]);
         }
         
+        // register for live, new keyboard taps
+        int notifyToken = 0; // unregister with notify_cancel()
+        notify_register_dispatch(kCGNotifyEventTapAdded, &notifyToken, dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_HIGH, 0), ^(int token) {
+            
+            // (re)enumerate taps
+            currentTaps = listTaps();
+            
+            // new taps
+            newTaps = [NSMutableSet setWithArray:currentTaps.allKeys];
+            
+            [newTaps minusSet:[NSSet setWithArray:taps.allKeys]];
+            
+            // check for new taps
+            if (0 != newTaps.count)
+            {
+                NSLog(@"detecte %lu new keyboard taps", (unsigned long)newTaps.count);
+                
+                for (NSNumber* tap in newTaps)
+                {
+                    NSLog(@"tap (process: %@): %@", tap, currentTaps[tap]);
+                }
+            }
+            
+            // update
+            taps = currentTaps;
+            
+        });
         
+        // run
+        [[NSRunLoop currentRunLoop] run];
+
     }
+    
     return 0;
 }
